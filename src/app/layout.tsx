@@ -22,16 +22,13 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: "wacrm",
-    template: "%s — wacrm",
+    default: "SecureMojo WhatsApp CRM",
+    template: "%s — SecureMojo WhatsApp CRM",
   },
-  description: "Self-hostable CRM template for WhatsApp.",
+  description: "WhatsApp CRM for SecureMojo.",
   robots: {
     index: false,
     follow: false,
-  },
-  icons: {
-    icon: [{ url: "/icon" }],
   },
   formatDetection: {
     email: false,
