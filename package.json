@@ -1,17 +1,17 @@
 {
-  "name": "wacrm",
+  "name": "securemojo-crm",
   "version": "0.8.0",
   "private": true,
-  "description": "Self-hostable CRM template for WhatsApp built on Next.js and Supabase — shared inbox, contacts, sales pipelines, broadcasts, and no-code automations.",
+  "description": "SecureMojo CRM — WhatsApp CRM built on Next.js and Supabase. Shared inbox, contacts, sales pipelines, broadcasts, and no-code automations. Based on the wacrm template (MIT) by Arnas Donauskas.",
   "license": "MIT",
-  "author": "Arnas Donauskas",
-  "homepage": "https://github.com/ArnasDon/wacrm",
+  "author": "SecureMojo",
+  "homepage": "https://securemojo.in",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ArnasDon/wacrm.git"
+    "url": "git+https://github.com/securemojo/Whatsapp-CRM.git"
   },
   "bugs": {
-    "url": "https://github.com/ArnasDon/wacrm/issues"
+    "url": "https://github.com/securemojo/Whatsapp-CRM/issues"
   },
   "keywords": [
     "crm",
