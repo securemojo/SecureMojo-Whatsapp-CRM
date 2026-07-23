@@ -246,11 +246,11 @@ export default function JoinPage() {
         <CardContent className="flex flex-col gap-2">
           {/* For server_error the failure is transient — the network
               flapped or the peek endpoint hiccupped. Try-again is
-              the right primary action; the "create account" /
-              "sign in" links stay as secondary options. Other
-              failure reasons (not_found / used / expired) are
-              terminal for this token, so no retry — just the
-              signup/sign-in escape hatches. */}
+              the right primary action. Other failure reasons
+              (not_found / used / expired) are terminal for this
+              token — signup is invitation-only, so the only escape
+              hatches are signing in or requesting a fresh invite
+              from an administrator. */}
           {peek.reason === 'server_error' ? (
             <>
               <Button
@@ -259,22 +259,20 @@ export default function JoinPage() {
               >
                 Try again
               </Button>
-              <Link href="/signup">
+              <Link href="/login">
                 <Button
                   variant="outline"
                   className="w-full border-border text-muted-foreground hover:bg-muted hover:text-foreground"
                 >
-                  Create a new account instead
+                  Sign in
                 </Button>
               </Link>
             </>
           ) : (
             <>
-              <Link href="/signup">
-                <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
-                  Create a new account instead
-                </Button>
-              </Link>
+              <p className="text-center text-sm text-muted-foreground">
+                Ask your administrator for a new invite link.
+              </p>
               <Link href="/login">
                 <Button
                   variant="outline"

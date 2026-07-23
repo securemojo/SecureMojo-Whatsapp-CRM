@@ -68,12 +68,17 @@ function SignupPageInner() {
       ? `${window.location.origin}/join/${encodeURIComponent(inviteToken)}`
       : undefined;
 
+    // `invite_token` rides along in user metadata so the DB-side
+    // signup gate (migration 037) can verify the invitation —
+    // signups without a valid pending invite are rejected at the
+    // database level.
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
           full_name: fullName,
+          ...(inviteToken ? { invite_token: inviteToken } : {}),
         },
         ...(emailRedirectTo ? { emailRedirectTo } : {}),
       },
@@ -88,6 +93,40 @@ function SignupPageInner() {
     setSuccess(true);
     setLoading(false);
   };
+
+  // Closed signup: without an invite token there is no form to
+  // show — accounts are created only through invite links issued
+  // by an administrator (Settings → Team members). The DB-side
+  // gate (migration 037) enforces the same rule for direct API
+  // calls; this screen just explains it.
+  if (!inviteToken) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <Card className="w-full max-w-md border-border bg-card">
+          <CardHeader className="items-center text-center">
+            <img
+              src="/securemojo-logo.png"
+              alt="SecureMojo"
+              className="mb-2 h-12 w-12 rounded-xl"
+            />
+            <CardTitle className="text-xl text-foreground">
+              Signup is invitation-only
+            </CardTitle>
+            <CardDescription className="text-muted-foreground">
+              New accounts are created by invitation. Ask your
+              administrator for an invite link, then open it to set up
+              your account.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href="/login">
+              <Button className="w-full">Go to sign in</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (success) {
     return (
