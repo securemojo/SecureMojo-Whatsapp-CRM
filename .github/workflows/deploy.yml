@@ -1,0 +1,113 @@
+name: Deploy to Hostinger
+
+# Build the production bundle in GitHub Actions (a big, disposable CI
+# runner) and ship the finished artifact to Hostinger over SSH. The
+# production server then only has to RUN the app — it never runs the
+# CPU/RAM-heavy `next build` again, which is what was spiking Max
+# Processes to 200/200 and returning 503 after every deploy.
+#
+# ── Before this workflow can run, do the one-time setup in
+#    docs/deployment.md (Hostinger Git auto-deploy MUST be turned off,
+#    and the repository secrets below must be created). ──
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {} # allow manual "Run workflow" from the Actions tab
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # 1) Reuse the exact same gate as CI. Deploy only runs if this passes.
+  verify:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    env:
+      # NEXT_PUBLIC_* are inlined at BUILD time, so the real public
+      # Supabase values must be present here (they are public keys —
+      # safe as repo variables). Server-only secrets (service role,
+      # ENCRYPTION_KEY, META_APP_SECRET) are read at RUNTIME on
+      # Hostinger and are NOT needed in CI.
+      NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
+      # Placeholders so module-load code in lib/whatsapp/* doesn't throw
+      # during build/test. Never used against a real service.
+      ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
+      META_APP_SECRET: 'ci-dummy-meta-secret'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      # Hand the built app to the deploy job. node_modules is rebuilt
+      # on the server with `npm ci --omit=dev` (smaller, and native
+      # deps match the server's architecture).
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-build
+          include-hidden-files: true
+          retention-days: 1
+          path: |
+            .next
+            public
+            package.json
+            package-lock.json
+            next.config.ts
+            messages
+            src/i18n
+
+  # 2) Ship the artifact to Hostinger and restart the app.
+  deploy:
+    name: Ship to Hostinger
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-build
+          path: build
+
+      - name: Load SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HOSTINGER_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -p "${{ secrets.HOSTINGER_SSH_PORT }}" -H \
+            "${{ secrets.HOSTINGER_SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      # rsync the built app into the live directory. --delete keeps the
+      # server clean of files removed from the repo. node_modules and
+      # the runtime .env on the server are preserved via --exclude.
+      - name: Sync files
+        run: |
+          rsync -az --delete \
+            --exclude 'node_modules' \
+            --exclude '.env' \
+            --exclude '.env.local' \
+            -e "ssh -i ~/.ssh/id_deploy -p ${{ secrets.HOSTINGER_SSH_PORT }}" \
+            build/ \
+            "${{ secrets.HOSTINGER_SSH_USER }}@${{ secrets.HOSTINGER_SSH_HOST }}:${{ secrets.HOSTINGER_DEPLOY_PATH }}/"
+
+      # Install prod deps (fast — lockfile cached on server) and restart.
+      # The restart mechanism is Hostinger-specific: Phusion Passenger
+      # (Hostinger's default Node runner) restarts when tmp/restart.txt
+      # is touched. If your app uses a different runner, replace the
+      # touch line with the correct restart command (see docs).
+      - name: Install prod deps & restart
+        run: |
+          ssh -i ~/.ssh/id_deploy -p "${{ secrets.HOSTINGER_SSH_PORT }}" \
+            "${{ secrets.HOSTINGER_SSH_USER }}@${{ secrets.HOSTINGER_SSH_HOST }}" \
+            "cd ${{ secrets.HOSTINGER_DEPLOY_PATH }} && \
+             npm ci --omit=dev && \
+             mkdir -p tmp && touch tmp/restart.txt"
