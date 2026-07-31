@@ -89,6 +89,55 @@ Code deploys do **not** run SQL. When a change adds a file under
 on it. A deploy whose code expects a not-yet-applied migration will
 throw at runtime.
 
+## Will normal usage ever cause a 503? No.
+
+This is the common worry, so state it plainly: **request volume does
+not cause 503.** Node.js serves the whole app from one process on an
+event loop — hundreds of concurrent requests share it without
+spawning new OS processes. Hostinger's "Max Processes: 200" ceiling
+counts processes, not requests, so heavy CRM use (inbox, broadcasts,
+API traffic in and out) never approaches it.
+
+Two design facts make runtime robust:
+
+- A single failing request returns a 500 for **that request only**;
+  it never crashes the server process. One bad broadcast or webhook
+  cannot take the site down.
+- The heavy endpoints (broadcast send, webhook processing) are
+  batched and time-capped (`maxDuration = 60`), so no request runs
+  away with CPU or memory.
+
+503 therefore only comes from the app failing to **start** (a boot
+crash-loop) or the **build** spiking during a server-side deploy —
+never from serving traffic. Both are addressed:
+
+- **Boot reliability** — the app only crash-loops if it cannot start.
+  Keep env vars complete and correct, and never change `ENCRYPTION_KEY`
+  on only one side (it must match across local and Hostinger). This is
+  the single most important operational rule.
+- **Deploy spike** — remove it with the CI build path above, or simply
+  deploy during low-traffic hours; a sub-minute blip at a quiet time
+  affects no one.
+- **Self-healing** — Hostinger restarts a crashed app within seconds;
+  "Stop running processes" clears a stuck window instantly.
+
+### Optional: a lighter runtime (standalone output)
+
+To shrink the app's memory footprint further, Next.js can emit a
+`standalone` server bundle (only the code and dependencies actually
+used). It lowers runtime RAM and speeds cold starts. It is **opt-in**
+because it changes how the app is started:
+
+1. Add `output: "standalone"` to `next.config.ts`.
+2. Ensure `.next/static` and `public` are copied next to the
+   standalone server after build.
+3. Change the Hostinger **start** command to
+   `node .next/standalone/server.js`.
+
+Do all three together or not at all — enabling the config without
+changing the start command has no effect. Leave this until there is a
+measured memory problem; the app runs comfortably without it.
+
 ## If you still see a 503
 
 - It is almost always the process/RAM ceiling, not disk (disk is <1%).
